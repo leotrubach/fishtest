@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+from __future__ import absolute_import, print_function
 
 import datetime
 import json
@@ -46,17 +46,17 @@ HTTP_TIMEOUT = 5.0
 FISHCOOKING_URL = 'https://github.com/mcostalba/FishCooking'
 ARCH = 'ARCH=x86-64-modern' if is_64bit() else 'ARCH=x86-32'
 EXE_SUFFIX = ''
-MAKE_CMD = 'make profile-build COMP=gcc ' + ARCH
+MAKE_CMD = 'make profile-build COMP=gcc %s' % (ARCH,)
 
 if IS_WINDOWS:
     EXE_SUFFIX = '.exe'
-    MAKE_CMD = 'mingw32-make profile-build COMP=mingw ' + ARCH
+    MAKE_CMD = 'mingw32-make profile-build COMP=mingw %s' % (ARCH,)
 
 
 def binary_filename(sha):
     system = platform.uname()[0].lower()
     architecture = '64' if is_64bit() else '32'
-    return sha + '_' + system + '_' + architecture
+    return "%s_%s_%s" % (sha, system, architecture)
 
 
 def github_api(repo):
@@ -71,9 +71,10 @@ def verify_signature(engine, signature, remote, payload, concurrency):
         busy_process.stdin.write('setoption name Threads value %d\n' % (concurrency - 1))
         busy_process.stdin.write('go infinite\n')
 
+    bench_sig = ''
+    bench_nps = ''
     try:
-        bench_sig = ''
-        print 'Verifying signature of %s ...' % (os.path.basename(engine))
+        print('Verifying signature of %s ...' % (os.path.basename(engine)))
         with open(os.devnull, 'wb') as f:
             p = subprocess.Popen([engine, 'bench'], stderr=subprocess.PIPE, stdout=f, universal_newlines=True)
         for line in iter(p.stderr.readline, ''):
@@ -84,12 +85,12 @@ def verify_signature(engine, signature, remote, payload, concurrency):
 
         p.wait()
         if p.returncode != 0:
-            raise Exception('Bench exited with non-zero code %d' % (p.returncode))
+            raise Exception('Bench exited with non-zero code %d' % (p.returncode,))
 
         if int(bench_sig) != int(signature):
             message = 'Wrong bench in %s Expected: %s Got: %s' % (os.path.basename(engine), signature, bench_sig)
             payload['message'] = message
-            requests.post(remote + '/api/stop_run', data=json.dumps(payload),
+            requests.post('%s/api/stop_run' % (remote,), data=json.dumps(payload),
                           headers={'Content-type': 'application/json'}, timeout=HTTP_TIMEOUT)
             raise Exception(message)
 
@@ -103,25 +104,27 @@ def verify_signature(engine, signature, remote, payload, concurrency):
 
 def setup(item, testing_dir):
     """Download item from FishCooking to testing_dir"""
-    tree = requests.get(github_api(FISHCOOKING_URL) + '/git/trees/setup', timeout=HTTP_TIMEOUT).json()
+    tree = requests.get('%s/git/trees/setup' % (github_api(FISHCOOKING_URL),), timeout=HTTP_TIMEOUT).json()
     for blob in tree['tree']:
         if blob['path'] == item:
-            print 'Downloading %s ...' % (item)
+            print('Downloading %s ...' % (item,))
             blob_json = requests.get(blob['url'], timeout=HTTP_TIMEOUT).json()
             with open(os.path.join(testing_dir, item), 'wb+') as f:
                 f.write(b64decode(blob_json['content']))
             break
     else:
-        raise Exception('Item %s not found' % (item))
+        raise Exception('Item %s not found' % (item,))
 
 
 def build(worker_dir, sha, repo_url, destination, concurrency):
-    """Download and build sources in a temporary directory then move exe to destination"""
+    """
+    Download and build sources in a temporary directory then move exe to destination
+    """
     tmp_dir = tempfile.mkdtemp()
     os.chdir(tmp_dir)
 
     with open('sf.gz', 'wb+') as f:
-        f.write(requests.get(github_api(repo_url) + '/zipball/' + sha, timeout=HTTP_TIMEOUT).content)
+        f.write(requests.get('%s/zipball/%s' % (github_api(repo_url), sha), timeout=HTTP_TIMEOUT).content)
     zip_file = ZipFile('sf.gz')
     zip_file.extractall()
     zip_file.close()
@@ -137,9 +140,9 @@ def build(worker_dir, sha, repo_url, destination, concurrency):
             make_cmd = m.read().strip()
         subprocess.check_call(make_cmd, shell=True)
     else:
-        subprocess.check_call(MAKE_CMD + ' -j %s' % (concurrency), shell=True)
+        subprocess.check_call('%s -j %s' % (MAKE_CMD, concurrency), shell=True)
 
-    shutil.move('stockfish' + EXE_SUFFIX, destination)
+    shutil.move('stockfish%s' % (EXE_SUFFIX,), destination)
     os.chdir(worker_dir)
     shutil.rmtree(tmp_dir)
 
@@ -148,10 +151,10 @@ def setup_engine(destination, binaries_url, worker_dir, sha, repo_url, concurren
     if os.path.exists(destination): os.remove(destination)
     if len(binaries_url) > 0:
         try:
-            binary_url = binaries_url + '/' + binary_filename(sha)
+            binary_url = "%s/%s" % (binaries_url, binary_filename(sha))
             r = requests.get(binary_url, timeout=HTTP_TIMEOUT)
             if r.status_code == 200:
-                print 'Downloaded %s from %s' % (os.path.basename(destination), binary_url)
+                print('Downloaded %s from %s' % (os.path.basename(destination), binary_url))
                 with open(destination, 'wb+') as f:
                     f.write(r.content)
                 return
@@ -204,7 +207,7 @@ def adjust_tc(tc, base_nps, concurrency):
         scaled_tc = '%d/%s' % (num_moves, scaled_tc)
         tc_limit *= 100.0 / num_moves
 
-    print 'CPU factor : %f - tc adjusted to %s' % (factor, scaled_tc)
+    print('CPU factor : %f - tc adjusted to %s' % (factor, scaled_tc))
     return scaled_tc, tc_limit
 
 
@@ -230,7 +233,7 @@ def run_game(p, remote, result, spsa, spsa_tuning, tc_limit):
         try:
             line = q.get_nowait()
         except Empty:
-            if p.poll() != None:
+            if p.poll() is not None:
                 break
             time.sleep(1)
             continue
@@ -268,7 +271,7 @@ def run_game(p, remote, result, spsa, spsa_tuning, tc_limit):
                 spsa['draws'] = wld[2]
 
             try:
-                req = requests.post(remote + '/api/update_task', data=json.dumps(result),
+                req = requests.post('%s/api/update_task' % (remote,), data=json.dumps(result),
                                     headers={'Content-type': 'application/json'}, timeout=HTTP_TIMEOUT).json()
                 failed_updates = 0
 
@@ -303,7 +306,7 @@ def launch_cutechess(cmd, remote, result, spsa_tuning, games_to_play, tc_limit):
 
     if spsa_tuning:
         # Request parameters for next game
-        req = requests.post(remote + '/api/request_spsa', data=json.dumps(result),
+        req = requests.post('%s/api/request_spsa' % (remote,), data=json.dumps(result),
                             headers={'Content-type': 'application/json'}, timeout=HTTP_TIMEOUT).json()
 
         spsa['w_params'] = req['w_params']
@@ -317,7 +320,7 @@ def launch_cutechess(cmd, remote, result, spsa_tuning, games_to_play, tc_limit):
     idx = cmd.index('_spsa_')
     cmd = cmd[:idx] + ['option.%s=%d' % (x['name'], round(x['value'])) for x in spsa['b_params']] + cmd[idx + 1:]
 
-    print cmd
+    print(cmd)
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, universal_newlines=True, bufsize=1, close_fds=not IS_WINDOWS)
 
     try:
@@ -384,9 +387,9 @@ def run_games(worker_info, password, remote, run, task_id):
     if not os.path.exists(testing_dir):
         os.makedirs(testing_dir)
 
-    new_engine = os.path.join(testing_dir, 'stockfish' + EXE_SUFFIX)
-    base_engine = os.path.join(testing_dir, 'base' + EXE_SUFFIX)
-    cutechess = os.path.join(testing_dir, 'cutechess-cli' + EXE_SUFFIX)
+    new_engine = os.path.join(testing_dir, 'stockfish%s' % (EXE_SUFFIX,))
+    base_engine = os.path.join(testing_dir, 'base%s' % (EXE_SUFFIX,))
+    cutechess = os.path.join(testing_dir, 'cutechess-cli%s' % (EXE_SUFFIX,))
 
     # We have already run another task from the same run ?
     run_id_file = os.path.join(testing_dir, 'run_id.txt')
@@ -441,11 +444,11 @@ def run_games(worker_info, password, remote, run, task_id):
     book_cmd = []
     if book.endswith('.pgn') or book.endswith('.epd'):
         plies = 2 * int(book_depth)
-        pgn_cmd = ['-openings', 'file=%s' % (book), 'format=%s' % (book[-3:]), 'order=random', 'plies=%d' % (plies)]
+        pgn_cmd = ['-openings', 'file=%s' % (book,), 'format=%s' % (book[-3:],), 'order=random', 'plies=%d' % (plies,)]
     else:
-        book_cmd = ['book=%s' % (book), 'bookdepth=%s' % (book_depth)]
+        book_cmd = ['book=%s' % (book,), 'bookdepth=%s' % (book_depth,)]
 
-    print 'Running %s vs %s' % (run['args']['new_tag'], run['args']['base_tag'])
+    print('Running %s vs %s' % (run['args']['new_tag'], run['args']['base_tag']))
 
     if spsa_tuning:
         games_to_play = games_concurrency * 2
@@ -456,7 +459,7 @@ def run_games(worker_info, password, remote, run, task_id):
 
     threads_cmd = []
     if not any("Threads" in s for s in new_options + base_options):
-        threads_cmd = ['option.Threads=%d' % (threads)]
+        threads_cmd = ['option.Threads=%d' % (threads,)]
 
     # If nodestime is being used, give engines extra grace time to
     # make time losses virtually impossible
@@ -466,13 +469,13 @@ def run_games(worker_info, password, remote, run, task_id):
 
     while games_remaining > 0:
         # Run cutechess-cli binary
-        cmd = [cutechess, '-repeat', '-rounds', str(games_to_play), '-tournament', 'gauntlet'] + pgnout + \
-              ['-srand', "%d" % struct.unpack("<L", os.urandom(struct.calcsize("<L")))] + \
-              ['-resign', 'movecount=3', 'score=400', '-draw', 'movenumber=34',
-               'movecount=8', 'score=20', '-concurrency', str(games_concurrency)] + pgn_cmd + \
-              ['-engine', 'name=stockfish', 'cmd=stockfish'] + new_options + ['_spsa_'] + \
-              ['-engine', 'name=base', 'cmd=base'] + base_options + ['_spsa_'] + \
-              ['-each', 'proto=uci', 'tc=%s' % (scaled_tc)] + nodestime_cmd + threads_cmd + book_cmd
+        cmd = ([cutechess, '-repeat', '-rounds', str(games_to_play), '-tournament', 'gauntlet'] + pgnout +
+               ['-srand', "%d" % struct.unpack("<L", os.urandom(struct.calcsize("<L")))] +
+               ['-resign', 'movecount=3', 'score=400', '-draw', 'movenumber=34',
+                'movecount=8', 'score=20', '-concurrency', str(games_concurrency)] + pgn_cmd +
+               ['-engine', 'name=stockfish', 'cmd=stockfish'] + new_options + ['_spsa_'] +
+               ['-engine', 'name=base', 'cmd=base'] + base_options + ['_spsa_'] +
+               ['-each', 'proto=uci', 'tc=%s' % (scaled_tc)] + nodestime_cmd + threads_cmd + book_cmd)
 
         task_status = launch_cutechess(cmd, remote, result, spsa_tuning, games_to_play,
                                        tc_limit * games_to_play / min(games_to_play, games_concurrency))
