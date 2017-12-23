@@ -40,7 +40,6 @@ CONFIG_FILE_DEFAULTS = [
     ('parameters', 'concurrency', '3')
 ]
 
-OLD_IP = '54.235.120.254'
 TESTS_HOST = 'tests.stockfishchess.org'
 
 
@@ -165,10 +164,6 @@ def main():
         else:
             sys.stderr.write('%s [username] [password]\n' % (sys.argv[0]))
             sys.exit(1)
-
-    # Re-route old IP
-    if OLD_IP in options.host:
-        options.host = TESTS_HOST
 
     # Write command line parameters to the config file
     config.set('login', 'username', args[0])
