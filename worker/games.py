@@ -2,6 +2,7 @@ from __future__ import absolute_import, print_function
 
 import datetime
 import json
+import logging
 import os
 import platform
 import shutil
@@ -22,6 +23,9 @@ try:
     from Queue import Queue, Empty
 except ImportError:
     from queue import Queue, Empty  # python 3.x
+
+
+logger = logging.getLogger(__name__)
 
 # Global beacuse is shared across threads
 old_stats = {'wins': 0, 'losses': 0, 'draws': 0, 'crashes': 0, 'time_losses': 0}
@@ -74,7 +78,7 @@ def verify_signature(engine, signature, remote, payload, concurrency):
     bench_sig = ''
     bench_nps = ''
     try:
-        print('Verifying signature of %s ...' % (os.path.basename(engine)))
+        logging.info('Verifying signature of %s ...', os.path.basename(engine))
         with open(os.devnull, 'wb') as f:
             p = subprocess.Popen([engine, 'bench'], stderr=subprocess.PIPE, stdout=f, universal_newlines=True)
         for line in iter(p.stderr.readline, ''):
@@ -107,7 +111,7 @@ def setup(item, testing_dir):
     tree = requests.get('%s/git/trees/setup' % (github_api(FISHCOOKING_URL),), timeout=HTTP_TIMEOUT).json()
     for blob in tree['tree']:
         if blob['path'] == item:
-            print('Downloading %s ...' % (item,))
+            logging.info('Downloading %s ...', item)
             blob_json = requests.get(blob['url'], timeout=HTTP_TIMEOUT).json()
             with open(os.path.join(testing_dir, item), 'wb+') as f:
                 f.write(b64decode(blob_json['content']))
@@ -154,13 +158,12 @@ def setup_engine(destination, binaries_url, worker_dir, sha, repo_url, concurren
             binary_url = "%s/%s" % (binaries_url, binary_filename(sha))
             r = requests.get(binary_url, timeout=HTTP_TIMEOUT)
             if r.status_code == 200:
-                print('Downloaded %s from %s' % (os.path.basename(destination), binary_url))
+                logging.info('Downloaded %s from %s', os.path.basename(destination), binary_url)
                 with open(destination, 'wb+') as f:
                     f.write(r.content)
                 return
         except:
-            sys.stderr.write('Unable to download exe, fall back on local compile:\n')
-            traceback.print_exc(file=sys.stderr)
+            logging.exception('Unable to download exe, fall back on local compile')
 
     build(worker_dir, sha, repo_url, destination, concurrency)
 
@@ -207,7 +210,7 @@ def adjust_tc(tc, base_nps, concurrency):
         scaled_tc = '%d/%s' % (num_moves, scaled_tc)
         tc_limit *= 100.0 / num_moves
 
-    print('CPU factor : %f - tc adjusted to %s' % (factor, scaled_tc))
+    logging.info('CPU factor : %f - tc adjusted to %s', factor, scaled_tc)
     return scaled_tc, tc_limit
 
 
@@ -227,7 +230,7 @@ def run_game(p, remote, result, spsa, spsa_tuning, tc_limit):
     t.start()
 
     end_time = datetime.datetime.now() + datetime.timedelta(seconds=tc_limit)
-    print('TC limit', tc_limit, 'End time:', end_time)
+    logging.info('TC limit %s End time %s', tc_limit, end_time)
 
     while datetime.datetime.now() < end_time:
         try:
@@ -243,7 +246,7 @@ def run_game(p, remote, result, spsa, spsa_tuning, tc_limit):
 
         # Have we reached the end of the match?  Then just exit
         if 'Finished match' in line:
-            print('Finished match cleanly')
+            logging.info('Finished match cleanly')
             kill_process(p)
             break
 
@@ -277,21 +280,21 @@ def run_game(p, remote, result, spsa, spsa_tuning, tc_limit):
 
                 if not req['task_alive']:
                     # This task is no longer neccesary
-                    print('Server told us task is no longer needed')
+                    logging.info('Server told us task is no longer needed')
                     kill_process(p)
                     return req
 
             except:
-                sys.stderr.write('Exception from calling update_task:\n')
-                traceback.print_exc(file=sys.stderr)
+                logging.exception('Exception from calling update_task')
                 failed_updates += 1
                 if failed_updates > 5:
-                    print('Too many failed update attempts')
+                    logging.error('Too many failed update attempts')
                     kill_process(p)
                     break
 
-    if datetime.datetime.now() >= end_time:
-        print(datetime.datetime.now(), 'is past end time', end_time)
+    current_time = datetime.datetime.now()
+    if  current_time >= end_time:
+        logging.warning('%s is past end time %s', current_time, end_time)
         kill_process(p)
 
     return {'task_alive': True}
@@ -320,15 +323,14 @@ def launch_cutechess(cmd, remote, result, spsa_tuning, games_to_play, tc_limit):
     idx = cmd.index('_spsa_')
     cmd = cmd[:idx] + ['option.%s=%d' % (x['name'], round(x['value'])) for x in spsa['b_params']] + cmd[idx + 1:]
 
-    print(cmd)
+    logging.info(cmd)
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, universal_newlines=True, bufsize=1, close_fds=not IS_WINDOWS)
 
     try:
         return run_game(p, remote, result, spsa, spsa_tuning, tc_limit)
     except:
-        traceback.print_exc(file=sys.stderr)
+        logging.exception('Exception running games')
         try:
-            print('Exception running games')
             kill_process(p)
         except:
             pass
@@ -448,7 +450,7 @@ def run_games(worker_info, password, remote, run, task_id):
     else:
         book_cmd = ['book=%s' % (book,), 'bookdepth=%s' % (book_depth,)]
 
-    print('Running %s vs %s' % (run['args']['new_tag'], run['args']['base_tag']))
+    logging.info('Running %s vs %s', run['args']['new_tag'], run['args']['base_tag'])
 
     if spsa_tuning:
         games_to_play = games_concurrency * 2

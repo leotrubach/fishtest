@@ -2,24 +2,26 @@
 from __future__ import print_function, absolute_import
 
 import json
+import logging
 import multiprocessing
-import os
 import platform
 import signal
 import sys
 import time
-import traceback
 import uuid
 from ConfigParser import SafeConfigParser
 from optparse import OptionParser
-
 from os.path import dirname as dn, abspath as ab
+
 project_path = dn(dn(ab(__file__)))
 sys.path.insert(0, project_path)
 
 from worker import requests
 from worker.games import run_games
 from worker.updater import update
+
+logging.basicConfig(format='%(message)s')
+logger = logging.getLogger()
 
 FAILURE_SLEEP_DURATION = 1800
 NO_VERSION_SLEEP_DURATION = 5
@@ -86,34 +88,33 @@ def worker(worker_info, password, remote):
     }
 
     try:
-        req = requests.post('%s/api/request_version' % remote, data=json.dumps(payload),
+        req = requests.post('%s/api/request_version' % (remote,), data=json.dumps(payload),
                             headers={'Content-type': 'application/json'}, timeout=HTTP_TIMEOUT)
         req = json.loads(req.text)
 
         if 'version' not in req:
-            print('Incorrect username/password')
+            logging.warning('Incorrect username/password')
             time.sleep(NO_VERSION_SLEEP_DURATION)
             sys.exit(1)
 
         if req['version'] > WORKER_VERSION:
-            print('Updating worker version to %d' % (req['version']))
+            logging.info('Updating worker version to %d', req['version'])
             update()
 
         req = requests.post('%s/api/request_task' % remote, data=json.dumps(payload),
                             headers={'Content-type': 'application/json'}, timeout=HTTP_TIMEOUT)
         req = json.loads(req.text)
     except:
-        sys.stderr.write('Exception accessing host:\n')
-        traceback.print_exc()
+        logging.exception('Exception accessing host')
         time.sleep(CONNECTION_ERROR_SLEEP_DURATION)
         return
 
     if 'error' in req:
-        raise Exception('Error from remote: %s' % (req['error']))
+        raise Exception('Error from remote: %s' % (req['error'],))
 
     # No tasks ready for us yet, just wait...
     if 'task_waiting' in req:
-        print('No tasks available at this time, waiting...')
+        logging.info('No tasks available at this time, waiting...')
         time.sleep(NO_TASKS_SLEEP_DURATION)
         return
 
@@ -123,8 +124,7 @@ def worker(worker_info, password, remote):
     try:
         run_games(worker_info, password, remote, run, task_id)
     except:
-        sys.stderr.write('\nException running games:\n')
-        traceback.print_exc()
+        logging.exception('Exception running games')
         success = False
     finally:
         payload = {
@@ -134,11 +134,11 @@ def worker(worker_info, password, remote):
             'task_id': task_id
         }
         try:
-            requests.post('%s/api/failed_task' % remote, data=json.dumps(payload),
+            requests.post('%s/api/failed_task' % (remote,), data=json.dumps(payload),
                           headers={'Content-type': 'application/json'}, timeout=HTTP_TIMEOUT)
         except:
             pass
-        sys.stderr.write('Task exited\n')
+        logging.info('Task exited')
 
     return success
 
@@ -162,7 +162,7 @@ def main():
         if username and password:
             args.extend([username, password])
         else:
-            sys.stderr.write('%s [username] [password]\n' % (sys.argv[0]))
+            sys.stderr.write('%s [username] [password]\n' % (sys.argv[0],))
             sys.exit(1)
 
     # Write command line parameters to the config file
@@ -175,7 +175,7 @@ def main():
         config.write(f)
 
     remote = 'http://%s:%s' % (options.host, options.port)
-    print('Worker version %d connecting to %s' % (WORKER_VERSION, remote))
+    logging.info('Worker version %d connecting to %s', WORKER_VERSION, remote)
 
     try:
         cpu_count = min(options.concurrency, multiprocessing.cpu_count() - 1)
@@ -183,7 +183,7 @@ def main():
         cpu_count = options.concurrency
 
     if cpu_count <= 0:
-        sys.stderr.write('Not enough CPUs to run fishtest (it requires at least two)\n')
+        logging.error('Not enough CPUs to run fishtest (it requires at least two)')
         sys.exit(1)
 
     uname = platform.uname()
