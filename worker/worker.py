@@ -1,22 +1,31 @@
 #!/usr/bin/python
 from __future__ import print_function, absolute_import
-
+import sys
 import json
 import logging
 import multiprocessing
 import platform
 import signal
-import sys
 import time
 import uuid
-from ConfigParser import SafeConfigParser
+
 from optparse import OptionParser
-from os.path import dirname as dn, abspath as ab
+from os.path import dirname as dn, abspath as ab, join as j
 
 project_path = dn(dn(ab(__file__)))
 sys.path.insert(0, project_path)
+sys.path.append(j(project_path, 'worker', 'packages'))
 
-from worker import requests
+import six
+# noinspection PyUnresolvedReferences
+from six import configparser
+
+if six.PY2:
+    ConfigParser = configparser.SafeConfigParser
+else:
+    ConfigParser = configparser.ConfigParser
+
+import requests
 from worker.games import run_games
 from worker.updater import update
 
@@ -51,7 +60,7 @@ def setup_config_file(config_file):
     :param config_file: configuration file name
     :return: SafeConfigParser object that read
     """
-    config = SafeConfigParser()
+    config = ConfigParser()
     config.read(config_file)
     defaults_added = False
 

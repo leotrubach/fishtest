@@ -7,7 +7,7 @@ import sys
 from distutils.dir_util import copy_tree
 from zipfile import ZipFile
 
-from . import requests
+import requests
 
 WORKER_URL = 'https://github.com/glinscott/fishtest/archive/master.zip'
 

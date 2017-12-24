@@ -1,4 +1,5 @@
 from __future__ import absolute_import, print_function
+from six import Queue, Empty
 
 import datetime
 import json
@@ -16,12 +17,8 @@ import time
 from base64 import b64decode
 from zipfile import ZipFile
 
-from . import requests
+import requests
 
-try:
-    from Queue import Queue, Empty
-except ImportError:
-    from queue import Queue, Empty  # python 3.x
 
 logger = logging.getLogger(__name__)
 
