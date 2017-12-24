@@ -18,7 +18,7 @@ sys.path.append(j(project_path, 'worker', 'packages'))
 
 import six
 # noinspection PyUnresolvedReferences
-from six import configparser
+from six.moves import configparser
 
 if six.PY2:
     ConfigParser = configparser.SafeConfigParser

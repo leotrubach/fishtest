@@ -1,5 +1,5 @@
 from __future__ import absolute_import, print_function
-from six import Queue, Empty
+from six.moves.queue import Queue, Empty
 
 import datetime
 import json
@@ -67,8 +67,8 @@ def github_api(repo):
 def verify_signature(engine, signature, remote, payload, concurrency):
     if concurrency > 1:
         busy_process = subprocess.Popen([engine], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-        busy_process.stdin.write('setoption name Threads value %d\n' % (concurrency - 1))
-        busy_process.stdin.write('go infinite\n')
+        busy_process.stdin.write(b'setoption name Threads value %d\n' % (concurrency - 1))
+        busy_process.stdin.write(b'go infinite\n')
 
     bench_sig = ''
     bench_nps = ''
@@ -95,7 +95,7 @@ def verify_signature(engine, signature, remote, payload, concurrency):
 
     finally:
         if concurrency > 1:
-            busy_process.stdin.write('quit\n')
+            busy_process.stdin.write(b'quit\n')
             busy_process.kill()
 
     return bench_nps
@@ -361,7 +361,7 @@ def run_games(worker_info, password, remote, run, task_id):
     spsa_tuning = 'spsa' in run['args']
     binaries_url = run.get('binaries_url', '')
     repo_url = run['args'].get('tests_repo', FISHCOOKING_URL)
-    games_concurrency = int(worker_info['concurrency']) / threads
+    games_concurrency = int(worker_info['concurrency']) // threads
 
     # Format options according to cutechess syntax
     def parse_options(s):
@@ -477,7 +477,7 @@ def run_games(worker_info, password, remote, run, task_id):
                ['-each', 'proto=uci', 'tc=%s' % (scaled_tc,)] + nodestime_cmd + threads_cmd + book_cmd)
 
         task_status = launch_cutechess(cmd, remote, result, spsa_tuning, games_to_play,
-                                       tc_limit * games_to_play / min(games_to_play, games_concurrency))
+                                       tc_limit * games_to_play // min(games_to_play, games_concurrency))
         if not task_status.get('task_alive', False):
             break
 
