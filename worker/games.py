@@ -13,7 +13,6 @@ import sys
 import tempfile
 import threading
 import time
-import traceback
 from base64 import b64decode
 from zipfile import ZipFile
 
@@ -23,7 +22,6 @@ try:
     from Queue import Queue, Empty
 except ImportError:
     from queue import Queue, Empty  # python 3.x
-
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +150,8 @@ def build(worker_dir, sha, repo_url, destination, concurrency):
 
 
 def setup_engine(destination, binaries_url, worker_dir, sha, repo_url, concurrency):
-    if os.path.exists(destination): os.remove(destination)
+    if os.path.exists(destination):
+        os.remove(destination)
     if len(binaries_url) > 0:
         try:
             binary_url = "%s/%s" % (binaries_url, binary_filename(sha))
@@ -293,7 +292,7 @@ def run_game(p, remote, result, spsa, spsa_tuning, tc_limit):
                     break
 
     current_time = datetime.datetime.now()
-    if  current_time >= end_time:
+    if current_time >= end_time:
         logging.warning('%s is past end time %s', current_time, end_time)
         kill_process(p)
 
@@ -403,7 +402,8 @@ def run_games(worker_info, password, remote, run, task_id):
 
     # Download or build from sources base and new
     if str(run['_id']) != run_id:
-        if os.path.exists(run_id_file): os.remove(run_id_file)
+        if os.path.exists(run_id_file):
+            os.remove(run_id_file)
         setup_engine(new_engine, binaries_url, worker_dir, run['args']['resolved_new'], repo_url,
                      worker_info['concurrency'])
         setup_engine(base_engine, binaries_url, worker_dir, run['args']['resolved_base'], repo_url,
@@ -477,7 +477,7 @@ def run_games(worker_info, password, remote, run, task_id):
                 'movecount=8', 'score=20', '-concurrency', str(games_concurrency)] + pgn_cmd +
                ['-engine', 'name=stockfish', 'cmd=stockfish'] + new_options + ['_spsa_'] +
                ['-engine', 'name=base', 'cmd=base'] + base_options + ['_spsa_'] +
-               ['-each', 'proto=uci', 'tc=%s' % (scaled_tc)] + nodestime_cmd + threads_cmd + book_cmd)
+               ['-each', 'proto=uci', 'tc=%s' % (scaled_tc,)] + nodestime_cmd + threads_cmd + book_cmd)
 
         task_status = launch_cutechess(cmd, remote, result, spsa_tuning, games_to_play,
                                        tc_limit * games_to_play / min(games_to_play, games_concurrency))
