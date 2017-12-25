@@ -27,7 +27,9 @@ def restart(worker_dir):
 
 def update():
     worker_dir = os.path.dirname(os.path.realpath(__file__))
-    update_dir = os.path.join(worker_dir, 'update')
+    fishtest_dir = os.path.dirname(worker_dir)
+    update_dir = os.path.join(fishtest_dir, 'update')
+
     if not os.path.exists(update_dir):
         os.makedirs(update_dir)
 
@@ -42,9 +44,13 @@ def update():
     zip_file.close()
 
     prefix = os.path.commonprefix([n.filename for n in zip_file.infolist()])
-    fishtest_src = os.path.join(update_dir, prefix)
-    fishtest_dir = os.path.dirname(worker_dir)  # fishtest_dir is assumed to be parent of worker_dir
-    copy_tree(fishtest_src, fishtest_dir)
+    new_worker_dir = os.path.join(prefix, 'worker')
+    old_worker_dir = os.path.join(fishtest_dir, 'old_worker')
+
+    shutil.move(worker_dir, old_worker_dir)
+    shutil.move(new_worker_dir, worker_dir)
+
+    shutil.rmtree(old_worker_dir)
     shutil.rmtree(update_dir)
 
     restart(worker_dir)
