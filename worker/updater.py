@@ -32,8 +32,10 @@ def update():
         os.makedirs(update_dir)
 
     worker_zip = os.path.join(update_dir, 'wk.zip')
-    with open(worker_zip, 'wb+') as f:
-        f.write(requests.get(WORKER_URL).content)
+    resp = requests.get(WORKER_URL, stream=True)
+    with open(worker_zip, 'wb') as f:
+        for chunk in resp.iter_content(chunk_size=1024):
+            f.write(chunk)
 
     zip_file = ZipFile(worker_zip)
     zip_file.extractall(update_dir)
